@@ -127,7 +127,7 @@ function(setup_mlas_source_for_windows)
         ${MLAS_SRC_DIR}/softmax_kernel_neon_fp16.cpp
         ${MLAS_SRC_DIR}/eltwise_kernel_neon.h
         ${MLAS_SRC_DIR}/eltwise_kernel_neon.cpp
-          ${MLAS_SRC_DIR}/layernorm_kernel_neon.cpp
+        ${MLAS_SRC_DIR}/layernorm_kernel_neon.cpp
         ${MLAS_SRC_DIR}/eltwise_kernel_neon_fp16.cpp
         ${MLAS_SRC_DIR}/sqnbitgemm_kernel_neon_int8_i8mm.cpp
         ${MLAS_SRC_DIR}/sconv_nchw_depthwise_multiplier_1.cpp
