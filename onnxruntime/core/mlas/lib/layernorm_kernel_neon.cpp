@@ -51,8 +51,10 @@ MlasLayerNormKernelNeon(
     const size_t n = NormSize;
     const float inv_n = 1.0f / static_cast<float>(n);
 
+    // The mean is always computed and reported through MeanOut (the generic
+    // path and the MLAS unit test do the same); RMSNorm just does not center.
     float mean = 0.0f;
-    if (!Simplified) {
+    {
         float32x4_t s0 = vdupq_n_f32(0.0f), s1 = s0, s2 = s0, s3 = s0;
         size_t i = 0;
         for (; i + 16 <= n; i += 16) {
@@ -72,7 +74,8 @@ MlasLayerNormKernelNeon(
     }
 
     // Centered sum of squares (for RMSNorm the "center" is zero).
-    const float32x4_t vmean = vdupq_n_f32(mean);
+    const float center = Simplified ? 0.0f : mean;
+    const float32x4_t vmean = vdupq_n_f32(center);
     float32x4_t q0 = vdupq_n_f32(0.0f), q1 = q0, q2 = q0, q3 = q0;
     size_t i = 0;
     for (; i + 16 <= n; i += 16) {
@@ -91,7 +94,7 @@ MlasLayerNormKernelNeon(
     }
     float sumsq = HorizontalSum(q0, q1, q2, q3);
     for (; i < n; i++) {
-        const float d = Input[i] - mean;
+        const float d = Input[i] - center;
         sumsq += d * d;
     }
 
@@ -106,7 +109,7 @@ MlasLayerNormKernelNeon(
             vst1q_f32(Output + i, vfmaq_f32(vld1q_f32(Bias + i), x, vld1q_f32(Scale + i)));
         }
         for (; i < n; i++) {
-            Output[i] = (Input[i] - mean) * inv_std * Scale[i] + Bias[i];
+            Output[i] = (Input[i] - center) * inv_std * Scale[i] + Bias[i];
         }
     } else {
         for (; i + 4 <= n; i += 4) {
@@ -114,7 +117,7 @@ MlasLayerNormKernelNeon(
             vst1q_f32(Output + i, vmulq_f32(x, vld1q_f32(Scale + i)));
         }
         for (; i < n; i++) {
-            Output[i] = (Input[i] - mean) * inv_std * Scale[i];
+            Output[i] = (Input[i] - center) * inv_std * Scale[i];
         }
     }
 
