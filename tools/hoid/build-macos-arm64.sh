@@ -14,7 +14,7 @@ DEPLOY="${MACOSX_DEPLOYMENT_TARGET:-15.5}"   # must equal OpenWhispr's PARAKEET_
 cd "$ROOT"
 ./build.sh --config Release --build_shared_lib --parallel --skip_tests --compile_no_warning_as_error \
   --cmake_generator Ninja --osx_arch arm64 --apple_deploy_target "$DEPLOY" --build_dir "$BUILD" \
-  --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 onnxruntime_BUILD_UNIT_TESTS=OFF --update --build
+  --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 onnxruntime_BUILD_UNIT_TESTS=OFF "CMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOY" --update --build
 
 PKG="onnxruntime-osx-arm64-${VER}-${TAG}"
 STAGE="$OUT/$PKG"
@@ -26,6 +26,7 @@ cp LICENSE ThirdPartyNotices.txt VERSION_NUMBER "$STAGE/"
 git rev-parse HEAD > "$STAGE/GIT_COMMIT_ID"
 codesign --force --sign - "$STAGE/lib/libonnxruntime.${VER}.dylib"
 lipo -archs "$STAGE/lib/libonnxruntime.${VER}.dylib" | grep -qx arm64
+vtool -show-build "$STAGE/lib/libonnxruntime.${VER}.dylib" | grep -q "minos $DEPLOY"   # deployment target must match
 ( cd "$OUT" && rm -f "$PKG.zip" && zip -qry "$PKG.zip" "$PKG" )
 shasum -a 256 "$OUT/$PKG.zip" | tee "$OUT/$PKG.zip.sha256"
 stat -f "size_bytes=%z" "$OUT/$PKG.zip"
