@@ -1,0 +1,30 @@
+name: hoid macOS arm64 dylib
+on:
+  push:
+    tags: ["hoid-v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: brew install ninja
+      - name: Build and package
+        env:
+          HOID_RELEASE_TAG: ${{ github.ref_name }}
+        run: tools/hoid/build-macos-arm64.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime-osx-arm64-hoid
+          path: build/hoid-dist/*.zip*
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/hoid-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/hoid-dist/*.zip*

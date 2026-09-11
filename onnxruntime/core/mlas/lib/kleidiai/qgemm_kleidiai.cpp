@@ -151,6 +151,47 @@ ArmKleidiAI::MlasDynamicQGemmBatch(
     const size_t LhsPackedStride = kai_get_lhs_packed_size_lhs_quant_pack_qai8dxp_f32(Shape.M, Shape.K, mr, kr, sr);
     std::byte* LhsPackedData = nullptr;
 
+    // Single-GEMM fast path: split the work over M only and let every task
+    // quantize/pack its own rows immediately before running the matmul on the
+    // full N range. This turns the two-phase schedule below (serial LHS pack,
+    // then N-split tiles) into one parallel section with no shared packed-LHS
+    // dependency, which matters for small-M encoder GEMMs (M ~ 100-400) where
+    // the serial pack and the barrier between the phases dominate.
+    if (BatchN == 1 && DataParams[0].Workspace == nullptr) {
+        const auto& p = DataParams[0];
+        const size_t lda = p.lda != 0 ? p.lda : Shape.K;
+        const size_t ldc = p.ldc != 0 ? p.ldc : Shape.N;
+        const size_t rows_per_step = m_step;
+        const size_t m_tiles = MlasDivRoundup(Shape.M, rows_per_step);
+        const size_t max_threads = static_cast<size_t>(MlasGetMaximumThreadCount(ThreadPool));
+        const size_t tasks = std::max<size_t>(1, std::min(max_threads, m_tiles));
+        const size_t tiles_per_task = MlasDivRoundup(m_tiles, tasks);
+        const size_t rows_per_task = tiles_per_task * rows_per_step;
+
+        if (g_kai_tls_qgemm.lhs_packed.capacity() < LhsPackedStride) {
+            g_kai_tls_qgemm.lhs_packed.reserve(LhsPackedStride);
+        }
+        g_kai_tls_qgemm.lhs_packed.resize(LhsPackedStride);
+        std::byte* lhs_all = g_kai_tls_qgemm.lhs_packed.data();
+
+        MlasTrySimpleParallel(ThreadPool, static_cast<ptrdiff_t>(tasks), [&](ptrdiff_t tid) {
+            const size_t m0 = static_cast<size_t>(tid) * rows_per_task;
+            if (m0 >= Shape.M) {
+                return;
+            }
+            const size_t m_cnt = std::min(rows_per_task, Shape.M - m0);
+            const float* a_rows = p.A + m0 * lda;
+            std::byte* lhs_tile = lhs_all + kai_get_lhs_packed_offset_lhs_quant_pack_qai8dxp_f32(m0, Shape.K, mr, kr, sr);
+            kai_run_lhs_quant_pack_qai8dxp_f32(m_cnt, Shape.K, mr, kr, sr, m0, a_rows, lda * sizeof(float), lhs_tile);
+            float* dst = p.C + m0 * ldc;
+            qgemm_gemm.ukernel.run_matmul(
+                m_cnt, Shape.N, Shape.K, lhs_tile, p.PackedB, dst,
+                ldc * sizeof(float), sizeof(float),
+                -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+        });
+        return;
+    }
+
     if (g_kai_tls_qgemm.lhs_packed.capacity() < LhsPackedStride * BatchN) {
 
         g_kai_tls_qgemm.lhs_packed.reserve(LhsPackedStride * BatchN);
