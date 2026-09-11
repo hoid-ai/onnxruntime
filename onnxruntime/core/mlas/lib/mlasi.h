@@ -1251,6 +1251,9 @@ extern "C" {
 #if defined(MLAS_TARGET_RISCV64) && defined(MLAS_USE_RVV)
     MLAS_LAYERNORM_F32_KERNEL MlasLayerNormKernelRvv;
 #endif
+#if defined(MLAS_TARGET_ARM64)
+    MLAS_LAYERNORM_F32_KERNEL MlasLayerNormKernelNeon;
+#endif
 }
 
 //

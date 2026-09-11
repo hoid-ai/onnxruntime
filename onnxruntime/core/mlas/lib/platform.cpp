@@ -748,7 +748,7 @@ Return Value:
 
     const bool HasI8MMInstructions = MLAS_CPUIDINFO::GetCPUIDInfo().HasArmNeon_I8MM();
     if (HasI8MMInstructions) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 
         this->GemmU8U8Dispatch = &MlasGemmU8X8DispatchUmmla;
         this->GemmU8S8Dispatch = &MlasGemmU8X8DispatchUmmla;
@@ -756,6 +756,7 @@ Return Value:
 #endif
     }
 
+    this->LayerNormF32Kernel = &MlasLayerNormKernelNeon;
     this->ArmNeonIsQuantActivationsUnsigned = HasI8MMInstructions ? false : true;
     this->QNBitGemmDispatch = &GetMlasQNBitGemmDispatchNeon(HasDotProductInstructions, HasI8MMInstructions);
 
